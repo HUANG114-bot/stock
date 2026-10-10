@@ -789,6 +789,3 @@ with st.expander("資料來源與計算說明"):
         """
     )
 '''
-path = Path("/mnt/data/app.py")
-path.write_text(code, encoding="utf-8")
-print(f"已建立完整程式：{path}（{len(code.splitlines())} 行）")
