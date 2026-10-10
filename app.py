@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 隱藏選單並透過 CSS 開放手機繪圖區的雙指縮放與觸控手勢
+# 隱藏選單與頁首頁尾，透過 CSS 開放手機繪圖區的觸控手勢
 st.markdown("""
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -22,9 +22,8 @@ st.markdown("""
         footer {visibility: hidden;}
         header {visibility: hidden;}
         [data-testid="collapsedControl"] {display: none;}
-        .block-container {padding-top: 1rem; padding-bottom: 0rem; padding-left: 0.5rem; padding-right: 0.5rem;}
+        .block-container {padding-top: 0.5rem; padding-bottom: 0rem; padding-left: 0.3rem; padding-right: 0.3rem;}
         
-        /* 關鍵：讓 Plotly 圖表區域完全接收手機縮放與滑動手勢 */
         .js-plotly-plot .plotly, .js-plotly-plot .plotly div {
             touch-action: auto !important;
         }
@@ -67,11 +66,11 @@ def fetch_raw_data(ticker_num, start_d, end_d):
         
     return df, tw_stock_id, yf_ticker
 
-# === 3. 單頁控制項 ===
+# === 3. 單頁極簡控制欄 ===
 col_stock, col_period, col_range = st.columns([1.2, 1, 1.2])
 
 with col_stock:
-    ticker_input = st.text_input("股票代號", value="2330", label_visibility="collapsed", placeholder="輸入代號(如2330)")
+    ticker_input = st.text_input("股票代號", value="2330", label_visibility="collapsed", placeholder="代號 (如 2330)")
 
 with col_period:
     period = st.radio("週期", ["日線", "周線"], horizontal=True, label_visibility="collapsed")
@@ -177,7 +176,7 @@ else:
         hovermode="x", 
         barmode='group',
         showlegend=False,
-        dragmode="zoom" # 關鍵修正：設為 zoom 以支援手機畫面的捏合放縮手勢
+        dragmode="zoom"
     )
     
     if period == "日線":
@@ -189,12 +188,13 @@ else:
     
     for annotation in fig['layout']['annotations']: annotation['font'] = dict(size=11, color='gray')
     
-    # 關鍵修正：開啟 scrollZoom: True 讓雙指縮放功能生效
+    # 修正重點：使用 width='stretch' 取代廢棄的 use_container_width=True
     st.plotly_chart(
         fig, 
         use_container_width=True, 
         config={
-            'displayModeBar': False,
+            'displayModeBar': True, # 顯示手機工具列，支援放大鏡與按鈕縮放
+            'displaylogo': False,
             'scrollZoom': True
         }
     )
