@@ -350,41 +350,73 @@ def find_support_resistance(df, window=60):
 
 
 # ------------------------- 頁首 ----------------------------
-st.title("台股技術分析")
-st.caption("簡潔看盤｜週期、均線、副圖直接切換")
-
-# --------------------- 簡化控制列 --------------------------
-with st.container(border=True):
-    c1, c2, c3 = st.columns([2.2, 1.4, 1.8])
-    with c1:
-        typed_ticker = st.text_input(
-            "股票代號", value=st.session_state.ticker_value,
-            placeholder="輸入代號，例如 2330", label_visibility="collapsed"
-        ).strip().upper().replace(".TW", "").replace(".TWO", "")
-        if typed_ticker:
-            st.session_state.ticker_value = typed_ticker
-    with c2:
-        period = st.radio("週期", ["日線", "週線", "月線"], horizontal=True, index=0,
-                          label_visibility="collapsed")
-    with c3:
-        range_label = st.selectbox("顯示區間", ["近 1 個月", "近 3 個月", "近半年", "近 1 年", "近 3 年", "全部"], index=3,
-                                  label_visibility="collapsed")
-
+st.markdown(
+    """
+    <style>
+    .stApp { background: #0e1117; color: #e8edf5; }
+    .block-container { max-width: 1800px; padding-top: .5rem; padding-bottom: .5rem; }
+    div[data-testid="stHorizontalBlock"] { gap: .55rem; }
+    div[data-testid="stTextInput"] input, div[data-testid="stSelectbox"] div[data-baseweb="select"] {
+        min-height: 36px;
+    }
+    div[data-testid="stRadio"] > div { gap: .55rem; }
+    div[data-testid="stCheckbox"] { margin-top: 0; }
+    .quote-line { color:#c8d1df; font-size:13px; line-height:1.8; margin: 2px 0 5px 0; }
+    .quote-up { color:#e53945; } .quote-down { color:#20a779; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+# 第一列：所有主要操作集中在圖表上方
+c1, c2, c3, c4, c5 = st.columns([1.1, 1.45, 1.5, 1.45, 1.35])
+with c1:
+    typed_ticker = st.text_input(
+        "股票代號", value=st.session_state.ticker_value,
+        placeholder="代號", label_visibility="collapsed"
+    ).strip().upper().replace(".TW", "").replace(".TWO", "")
+    if typed_ticker and typed_ticker != st.session_state.ticker_value:
+        st.session_state.ticker_value = typed_ticker
+with c2:
     fav_items = list(st.session_state.favorites.items())
     fav_labels = [f"{sid}｜{name}" for sid, name in fav_items]
-    f1, f2 = st.columns([3, 1])
-    with f1:
-        if fav_items:
-            selected_fav = st.selectbox("自選股", fav_labels, label_visibility="collapsed")
-            selected_id = selected_fav.split("｜")[0]
-            if selected_id != st.session_state.ticker_value:
-                st.session_state.ticker_value = selected_id
-                st.rerun()
-    with f2:
-        if st.button("＋ 自選股", use_container_width=True):
-            if typed_ticker:
-                st.session_state.favorites[typed_ticker] = STOCK_NAMES.get(typed_ticker, typed_ticker)
-                st.toast(f"已加入 {typed_ticker}")
+    selected_fav = st.selectbox(
+        "自選股", fav_labels, label_visibility="collapsed",
+        index=next((i for i, (sid, _) in enumerate(fav_items)
+                    if sid == st.session_state.ticker_value), 0) if fav_items else 0
+    ) if fav_items else None
+    if selected_fav:
+        selected_id = selected_fav.split("｜")[0]
+        if selected_id != st.session_state.ticker_value:
+            st.session_state.ticker_value = selected_id
+            st.rerun()
+with c3:
+    period = st.radio("週期", ["日線", "週線", "月線"], horizontal=True, index=0, label_visibility="collapsed")
+with c4:
+    range_label = st.selectbox(
+        "顯示區間", ["近 1 個月", "近 3 個月", "近半年", "近 1 年", "近 3 年", "全部"],
+        index=3, label_visibility="collapsed"
+    )
+with c5:
+    indicator = st.selectbox(
+        "副圖指標", ["成交量", "MACD", "RSI", "KD", "三大法人"],
+        index=0, label_visibility="collapsed"
+    )
+
+# 第二列：均線直接開關；不再需要往下找控制項
+m1, m2, m3, m4 = st.columns([.7, .8, .8, 4.7])
+with m1:
+    show_ma5 = st.checkbox("5MA", value=True)
+with m2:
+    show_ma20 = st.checkbox("20MA", value=True)
+with m3:
+    show_ma60 = st.checkbox("60MA", value=True)
+with m4:
+    if st.button("＋ 加入目前股票到自選股", type="secondary"):
+        current = st.session_state.ticker_value.strip().upper()
+        if current:
+            st.session_state.favorites[current] = STOCK_NAMES.get(current, current)
+            st.toast(f"已加入 {current}")
+            st.rerun()
 
 # ---------------------- 取得行情 ---------------------------
 ticker = st.session_state.ticker_value
@@ -392,7 +424,7 @@ end_date = datetime.date.today()
 days_back = 365 * 5 if range_label == "全部" else max(RANGE_MAP[range_label] * 2, 100)
 start_date = end_date - datetime.timedelta(days=days_back)
 
-with st.spinner(f"正在載入 {ticker} 行情與三大法人資料…"):
+with st.spinner(f"正在載入 {ticker} 行情…"):
     raw_df, stock_id, yf_symbol = fetch_raw_data(ticker, start_date, end_date)
 
 if raw_df is None or raw_df.empty:
@@ -403,70 +435,63 @@ df_daily = add_indicators(raw_df)
 if period == "週線":
     df = resample_weekly(df_daily)
 elif period == "月線":
-    df = df_daily.resample("ME").agg({"Open":"first", "High":"max", "Low":"min", "Close":"last", "Volume":"sum", "外資":"sum", "投信":"sum", "自營商":"sum"}).dropna(subset=["Open", "High", "Low", "Close"])
+    df = df_daily.resample("ME").agg({
+        "Open":"first", "High":"max", "Low":"min", "Close":"last",
+        "Volume":"sum", "外資":"sum", "投信":"sum", "自營商":"sum"
+    }).dropna(subset=["Open", "High", "Low", "Close"])
 else:
     df = df_daily.copy()
 df = add_indicators(df)
-
 if df.empty:
     st.error("目前沒有足夠資料可以繪圖。")
     st.stop()
 
-# ---------------------- 圖表顯示區間 -----------------------
 range_count = RANGE_MAP[range_label]
-if range_label == "全部":
-    view_df = df.copy()
-else:
-    view_df = df.tail(max(20, range_count)).copy()
+view_df = df.copy() if range_label == "全部" else df.tail(max(20, range_count)).copy()
 
-# 均線與副圖：常用選項放在圖表上方，不需要額外設定頁
-opt1, opt2, opt3, opt4 = st.columns([1, 1, 1, 2])
-with opt1:
-    show_ma5 = st.checkbox("5MA", value=True)
-with opt2:
-    show_ma20 = st.checkbox("20MA", value=True)
-with opt3:
-    show_ma60 = st.checkbox("60MA", value=True)
-with opt4:
-    indicator = st.selectbox("副圖", ["成交量", "MACD", "RSI", "KD", "三大法人"], index=0, label_visibility="collapsed")
-
-# ------------------------ 行情摘要 -------------------------
 last = df.iloc[-1]
 prev_close = df["Close"].iloc[-2] if len(df) >= 2 else last["Close"]
 change = float(last["Close"] - prev_close)
 change_pct = change / prev_close * 100 if prev_close else 0
 stock_name = STOCK_NAMES.get(stock_id, stock_id)
+change_class = "quote-up" if change >= 0 else "quote-down"
+st.markdown(
+    f'<div class="quote-line"><b>{stock_id} {stock_name}</b>　'
+    f'收 <b>{fmt_num(last["Close"])}</b>　'
+    f'<span class="{change_class}">{change:+.2f} ({change_pct:+.2f}%)</span>　'
+    f'開 {fmt_num(last["Open"])}　高 {fmt_num(last["High"])}　低 {fmt_num(last["Low"])}　'
+    f'量 {last["Volume"]:,.0f}　<span style="color:#8492a6">{df.index[-1].strftime("%Y-%m-%d")}</span></div>',
+    unsafe_allow_html=True
+)
 
-st.subheader(f"{stock_id}｜{stock_name}")
-m1, m2, m3, m4 = st.columns(4)
-m1.metric("最新收盤", fmt_num(last["Close"]), f"{change:+.2f} ({change_pct:+.2f}%)")
-m2.metric("開盤", fmt_num(last["Open"]))
-m3.metric("最高 / 最低", f"{fmt_num(last['High'])} / {fmt_num(last['Low'])}")
-m4.metric("成交量", f"{last['Volume']:,.0f}" if pd.notna(last["Volume"]) else "—")
-m4.metric("資料日期", df.index[-1].strftime("%Y-%m-%d"))
-
-# --------------------- 支撐壓力參考 ------------------------
 support, resistance = find_support_resistance(df_daily, 60)
-
-# -------------------------- 圖表 ---------------------------
 fig = make_subplots(
     rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.035,
     row_heights=[0.76, 0.24], subplot_titles=("K 線", indicator)
 )
 x = view_df.index
-hover_kline = ("日期：%{x|%Y-%m-%d}<br>開：%{open:.2f}<br>高：%{high:.2f}<br>低：%{low:.2f}<br>收：%{close:.2f}<extra></extra>")
-fig.add_trace(go.Candlestick(x=x, open=view_df["Open"], high=view_df["High"], low=view_df["Low"], close=view_df["Close"],
-    increasing_line_color="#e53945", decreasing_line_color="#20a779", name="K 線", hovertemplate=hover_kline), row=1, col=1)
+hover_kline = "日期：%{x|%Y-%m-%d}<br>開：%{open:.2f}<br>高：%{high:.2f}<br>低：%{low:.2f}<br>收：%{close:.2f}<extra></extra>"
+fig.add_trace(go.Candlestick(
+    x=x, open=view_df["Open"], high=view_df["High"], low=view_df["Low"], close=view_df["Close"],
+    increasing_line_color="#e53945", decreasing_line_color="#20a779", name="K 線",
+    hovertemplate=hover_kline
+), row=1, col=1)
 
-ma_styles = [("SMA_5", "#f39c35", "5MA", show_ma5), ("SMA_20", "#3987ff", "20MA", show_ma20), ("SMA_60", "#38c6c9", "60MA", show_ma60)]
+ma_styles = [
+    ("SMA_5", "#f39c35", "5MA", show_ma5),
+    ("SMA_20", "#3987ff", "20MA", show_ma20),
+    ("SMA_60", "#38c6c9", "60MA", show_ma60),
+]
 for col_name, color, label, visible in ma_styles:
     if visible:
-        fig.add_trace(go.Scatter(x=x, y=view_df[col_name], mode="lines", line=dict(color=color, width=1.2), name=label,
-            hovertemplate=f"{label}: %{{y:.2f}}<extra></extra>"), row=1, col=1)
+        fig.add_trace(go.Scatter(
+            x=x, y=view_df[col_name], mode="lines", line=dict(color=color, width=1.25),
+            name=label, hovertemplate=f"{label}: %{{y:.2f}}<extra></extra>"
+        ), row=1, col=1)
 
 if indicator == "成交量":
     vol_colors = ["#e53945" if c >= o else "#20a779" for c, o in zip(view_df["Close"], view_df["Open"])]
-    fig.add_trace(go.Bar(x=x, y=view_df["Volume"], marker_color=vol_colors, name="成交量", hovertemplate="成交量：%{y:,.0f}<extra></extra>"), row=2, col=1)
+    fig.add_trace(go.Bar(x=x, y=view_df["Volume"], marker_color=vol_colors, name="成交量"), row=2, col=1)
 elif indicator == "MACD":
     fig.add_trace(go.Scatter(x=x, y=view_df["MACD"], line=dict(color="#3987ff", width=1.4), name="MACD"), row=2, col=1)
     fig.add_trace(go.Scatter(x=x, y=view_df["Signal"], line=dict(color="#f39c35", width=1.2), name="訊號線"), row=2, col=1)
@@ -475,78 +500,64 @@ elif indicator == "MACD":
 elif indicator == "RSI":
     fig.add_trace(go.Scatter(x=x, y=view_df["RSI_6"], line=dict(color="#3987ff", width=1.2), name="RSI(6)"), row=2, col=1)
     fig.add_trace(go.Scatter(x=x, y=view_df["RSI_14"], line=dict(color="#f39c35", width=1.2), name="RSI(14)"), row=2, col=1)
-    for yline in [30, 70]: fig.add_hline(y=yline, line_dash="dot", line_color="rgba(128,128,128,.5)", row=2, col=1)
+    for yline in [30, 70]:
+        fig.add_hline(y=yline, line_dash="dot", line_color="rgba(128,128,128,.5)", row=2, col=1)
 elif indicator == "KD":
     fig.add_trace(go.Scatter(x=x, y=view_df["K"], line=dict(color="#3987ff", width=1.2), name="K"), row=2, col=1)
     fig.add_trace(go.Scatter(x=x, y=view_df["D"], line=dict(color="#f39c35", width=1.2), name="D"), row=2, col=1)
-    for yline in [20, 80]: fig.add_hline(y=yline, line_dash="dot", line_color="rgba(128,128,128,.5)", row=2, col=1)
+    for yline in [20, 80]:
+        fig.add_hline(y=yline, line_dash="dot", line_color="rgba(128,128,128,.5)", row=2, col=1)
 else:
     for chip_col, color in zip(CHIP_COLS, ["#e53945", "#20a779", "#f39c35"]):
         fig.add_trace(go.Bar(x=x, y=view_df[chip_col], name=chip_col, marker_color=color), row=2, col=1)
 
 if support is not None and resistance is not None:
-    fig.add_hline(y=support, row=1, col=1, line_dash="dot", line_color="rgba(32,167,121,.7)", annotation_text=f"低點 {support:.2f}", annotation_position="bottom right")
-    fig.add_hline(y=resistance, row=1, col=1, line_dash="dot", line_color="rgba(229,57,69,.7)", annotation_text=f"高點 {resistance:.2f}", annotation_position="top right")
+    fig.add_hline(y=support, row=1, col=1, line_dash="dot", line_color="rgba(32,167,121,.7)",
+                  annotation_text=f"低點 {support:.2f}", annotation_position="bottom right")
+    fig.add_hline(y=resistance, row=1, col=1, line_dash="dot", line_color="rgba(229,57,69,.7)",
+                  annotation_text=f"高點 {resistance:.2f}", annotation_position="top right")
 
-fig.update_layout(height=780, margin=dict(l=8, r=12, t=36, b=10), template="plotly_white", hovermode="x unified",
-    barmode="group", showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=1.01, xanchor="left", x=0),
-    dragmode="pan", uirevision=f"{stock_id}-{period}-{indicator}")
-fig.update_xaxes(showgrid=True, gridcolor="rgba(128,128,128,.15)", rangeslider_visible=False, showspikes=True, spikemode="across", spikesnap="cursor")
+fig.update_layout(
+    height=790, margin=dict(l=8, r=12, t=36, b=8), template="plotly_dark",
+    paper_bgcolor="#0e1117", plot_bgcolor="#0e1117", font=dict(color="#e8edf5", size=12),
+    hovermode="x unified", barmode="group", showlegend=True,
+    legend=dict(orientation="h", yanchor="bottom", y=1.01, xanchor="left", x=0),
+    dragmode="pan", uirevision=f"{stock_id}-{period}-{indicator}"
+)
+fig.update_xaxes(showgrid=True, gridcolor="rgba(128,128,128,.15)", rangeslider_visible=False,
+                 showspikes=True, spikemode="across", spikesnap="cursor")
 fig.update_yaxes(showgrid=True, gridcolor="rgba(128,128,128,.15)", side="right", fixedrange=False)
 for annotation in fig["layout"]["annotations"]:
-    annotation["font"] = dict(size=11, color="#667085")
+    annotation["font"] = dict(size=11, color="#7f9cc5")
 
-st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": True, "displaylogo": False, "scrollZoom": True,
-    "doubleClick": "reset", "responsive": True, "modeBarButtonsToAdd": ["drawline", "eraseshape"],
-    "toImageButtonOptions": {"format":"png", "filename":f"{stock_id}_stock_chart", "height":1000, "width":1600, "scale":2}})
-st.caption("滑鼠移到 K 線可查看開高低收；拖曳可平移，使用圖表工具列縮放或畫線。高低點為近 60 個交易日參考值。")
-
-# --------------------- 技術指標訊號 ------------------------
-st.subheader("🔎 技術指標條件提示")
-signals = build_signals(df)
-sig_rows = [{"類別": cat, "條件提示": message} for cat, message in signals]
-st.dataframe(pd.DataFrame(sig_rows), use_container_width=True, hide_index=True)
-st.caption(
-    "提示只描述指標條件是否成立，不是投資建議。均線、MACD、RSI、KD 可能出現落後或假訊號，"
-    "請搭配價格位置、成交量、基本面與個人風險管理判斷。"
+st.plotly_chart(
+    fig, use_container_width=True,
+    config={
+        "displayModeBar": True, "displaylogo": False, "scrollZoom": True,
+        "doubleClick": "reset", "responsive": True,
+        "modeBarButtonsToAdd": ["drawline", "eraseshape"],
+        "toImageButtonOptions": {"format":"png", "filename":f"{stock_id}_stock_chart",
+                                 "height":1000, "width":1600, "scale":2}
+    }
 )
 
-# ---------------------- 三大法人籌碼 -----------------------
-st.subheader("🏦 三大法人籌碼")
-chip_df = df_daily[CHIP_COLS].copy()
-chip_df = chip_df.loc[chip_df.index <= df_daily.index[-1]].tail(30)
-chip_latest = chip_df.iloc[-1] if not chip_df.empty else pd.Series({c: 0 for c in CHIP_COLS})
-
-cc1, cc2, cc3 = st.columns(3)
-for col, name in zip([cc1, cc2, cc3], CHIP_COLS):
-    with col:
-        value = float(chip_latest.get(name, 0))
-        col.metric(name, f"{value:+,.0f}", consecutive_net_days(chip_df[name]) if name in chip_df else "無資料")
-
-if not chip_df.empty:
-    chip_display = chip_df.tail(10).iloc[::-1].copy()
-    chip_display.index = chip_display.index.strftime("%Y-%m-%d")
-    chip_display.index.name = "日期"
-    st.dataframe(chip_display, use_container_width=True)
-else:
-    st.info("目前沒有法人資料。")
-
-st.caption(
-    "法人資料來自 FinMind；若來源沒有回傳資料，圖表會以 0 顯示，這不代表法人當日一定沒有交易。"
-    "請留意來源資料的更新時間與買賣超單位。"
-)
-
-# ------------------------- 頁尾 ----------------------------
-with st.expander("資料來源與計算說明"):
-    st.markdown(
-        """
-        - 行情：Yahoo Finance（yfinance），上市代號先查 `.TW`，無資料再查 `.TWO`。
-        - 三大法人：FinMind Taiwan institutional investors 資料。
-        - 均線：5、10、20、60 期簡單移動平均。
-        - MACD：EMA(12) − EMA(26)，訊號線為 EMA(9)。
-        - RSI：以 Wilder 風格的指數平滑近似計算 RSI(6)、RSI(14)。
-        - KD：9 期 RSV，K、D 使用指數平滑近似計算。
-        - 支撐／壓力：近 60 個日線交易日的最低價與最高價，僅作參考。
-        - 自選股清單目前存在 Streamlit session state；重開工作階段可能重設。
-        """
-    )
+# 其餘訊號與法人明細收進最底部折疊區，預設不佔畫面
+with st.expander("技術訊號與法人明細（需要時再展開）", expanded=False):
+    st.subheader("技術指標條件提示")
+    signals = build_signals(df)
+    st.dataframe(pd.DataFrame([{"類別": cat, "條件提示": message} for cat, message in signals]),
+                 use_container_width=True, hide_index=True)
+    st.subheader("三大法人籌碼")
+    chip_df = df_daily[CHIP_COLS].copy().tail(30)
+    if not chip_df.empty:
+        chip_latest = chip_df.iloc[-1]
+        cc1, cc2, cc3 = st.columns(3)
+        for col, name in zip([cc1, cc2, cc3], CHIP_COLS):
+            with col:
+                col.metric(name, f"{float(chip_latest.get(name, 0)):+,.0f}",
+                           consecutive_net_days(chip_df[name]))
+        chip_display = chip_df.tail(10).iloc[::-1].copy()
+        chip_display.index = chip_display.index.strftime("%Y-%m-%d")
+        chip_display.index.name = "日期"
+        st.dataframe(chip_display, use_container_width=True)
+    st.caption("行情來源：Yahoo Finance；法人資料來源：FinMind。法人資料未回傳時，0 不代表當日一定沒有交易。")
