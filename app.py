@@ -125,6 +125,18 @@ def init_state():
         st.session_state.chart_view_id = 0
     if "ticker_value" not in st.session_state:
         st.session_state.ticker_value = "2330"
+    if "ticker_input" not in st.session_state:
+        st.session_state.ticker_input = st.session_state.ticker_value
+    if "favorites_selector" not in st.session_state:
+        st.session_state.favorites_selector = "2330｜台積電"
+
+
+def sync_favorite_to_ticker():
+    selected = st.session_state.get("favorites_selector", "")
+    if "｜" in selected:
+        selected_id = selected.split("｜", 1)[0].strip().upper()
+        st.session_state.ticker_value = selected_id
+        st.session_state.ticker_input = selected_id
 
 
 init_state()
@@ -370,25 +382,26 @@ st.markdown(
 # 第一列：所有主要操作集中在圖表上方
 c1, c2, c3, c4, c5 = st.columns([1.1, 1.45, 1.5, 1.45, 1.35])
 with c1:
-    typed_ticker = st.text_input(
-        "股票代號", value=st.session_state.ticker_value,
-        placeholder="代號", label_visibility="collapsed"
-    ).strip().upper().replace(".TW", "").replace(".TWO", "")
+    st.text_input(
+        "股票代號", key="ticker_input", placeholder="輸入代碼後按 Enter",
+        label_visibility="collapsed"
+    )
+    typed_ticker = str(st.session_state.ticker_input).strip().upper().replace(".TW", "").replace(".TWO", "")
     if typed_ticker and typed_ticker != st.session_state.ticker_value:
         st.session_state.ticker_value = typed_ticker
 with c2:
     fav_items = list(st.session_state.favorites.items())
     fav_labels = [f"{sid}｜{name}" for sid, name in fav_items]
-    selected_fav = st.selectbox(
-        "自選股", fav_labels, label_visibility="collapsed",
-        index=next((i for i, (sid, _) in enumerate(fav_items)
-                    if sid == st.session_state.ticker_value), 0) if fav_items else 0
-    ) if fav_items else None
-    if selected_fav:
-        selected_id = selected_fav.split("｜")[0]
-        if selected_id != st.session_state.ticker_value:
-            st.session_state.ticker_value = selected_id
-            st.rerun()
+    current_label = next((f"{sid}｜{name}" for sid, name in fav_items
+                          if sid == st.session_state.ticker_value), fav_labels[0] if fav_labels else "")
+    if fav_items:
+        if st.session_state.get("favorites_selector") not in fav_labels:
+            st.session_state.favorites_selector = current_label
+        st.selectbox(
+            "自選股", fav_labels, key="favorites_selector",
+            on_change=sync_favorite_to_ticker,
+            label_visibility="collapsed"
+        )
 with c3:
     period = st.radio("週期", ["日線", "週線", "月線"], horizontal=True, index=0, label_visibility="collapsed")
 with c4:
