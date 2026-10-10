@@ -1,6 +1,4 @@
-from pathlib import Path
-
-code = r'''import datetime
+import datetime
 import math
 import warnings
 
@@ -681,7 +679,7 @@ for chip_col, color in zip(CHIP_COLS, ["#ff4d5a", "#00c087", "#f5c542"]):
             go.Bar(
                 x=x, y=view_df[chip_col], name=chip_col,
                 marker_color=color,
-                hovertemplate=f"{chip_col}：%{{y:,.0f} 張/股（依來源單位）<extra></extra>",
+                hovertemplate=f"{chip_col}：%{{y:,.0f}} 張/股（依來源單位）<extra></extra>",
             ), row=6, col=1
         )
 
@@ -788,4 +786,3 @@ with st.expander("資料來源與計算說明"):
         - 自選股清單目前存在 Streamlit session state；重開工作階段可能重設。
         """
     )
-'''
