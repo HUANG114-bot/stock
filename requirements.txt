@@ -1,6 +1,7 @@
-
 streamlit
 yfinance
 pandas
 plotly
 FinMind
+tqdm
+requests
