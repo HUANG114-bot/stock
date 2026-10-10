@@ -6,14 +6,14 @@ from plotly.subplots import make_subplots
 import datetime
 from FinMind.data import DataLoader
 
-# === 1. iPhone 專屬全螢幕與無側邊欄設定 ===
+# === 1. iPhone 專屬全螢幕與手勢支援設定 ===
 st.set_page_config(
     page_title="台股盤後分析站", 
     layout="wide", 
     initial_sidebar_state="collapsed"
 )
 
-# 隱藏 Streamlit 預設選單、頁首頁尾與左側拉欄按鈕
+# 隱藏選單並透過 CSS 開放手機繪圖區的雙指縮放與觸控手勢
 st.markdown("""
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -22,12 +22,16 @@ st.markdown("""
         footer {visibility: hidden;}
         header {visibility: hidden;}
         [data-testid="collapsedControl"] {display: none;}
-        /* 縮小手機版頂部間距 */
         .block-container {padding-top: 1rem; padding-bottom: 0rem; padding-left: 0.5rem; padding-right: 0.5rem;}
+        
+        /* 關鍵：讓 Plotly 圖表區域完全接收手機縮放與滑動手勢 */
+        .js-plotly-plot .plotly, .js-plotly-plot .plotly div {
+            touch-action: auto !important;
+        }
     </style>
 """, unsafe_allow_html=True)
 
-# === 2. 高效快取抓取資料 (自動判斷上市櫃) ===
+# === 2. 快取抓取資料 (自動判斷上市櫃) ===
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_raw_data(ticker_num, start_d, end_d):
     tw_stock_id = str(ticker_num).strip().upper().replace('.TW', '').replace('.TWO', '')
@@ -63,7 +67,7 @@ def fetch_raw_data(ticker_num, start_d, end_d):
         
     return df, tw_stock_id, yf_ticker
 
-# === 3. 單頁頂部直覺控制區 (無側邊欄) ===
+# === 3. 單頁控制項 ===
 col_stock, col_period, col_range = st.columns([1.2, 1, 1.2])
 
 with col_stock:
@@ -75,14 +79,12 @@ with col_period:
 with col_range:
     time_range = st.selectbox("區間", ["近 3 個月", "近半年", "近 1 年", "近 3 年"], index=2, label_visibility="collapsed")
 
-# 自動換算日期
 end_date = datetime.date.today()
 if time_range == "近 3 個月": start_date = end_date - datetime.timedelta(days=90)
 elif time_range == "近半年": start_date = end_date - datetime.timedelta(days=180)
 elif time_range == "近 1 年": start_date = end_date - datetime.timedelta(days=365)
 elif time_range == "近 3 年": start_date = end_date - datetime.timedelta(days=365*3)
 
-# 載入資料
 raw_df, tw_stock_id, yf_ticker = fetch_raw_data(ticker_input, start_date, end_date)
 
 if raw_df is None:
@@ -90,7 +92,6 @@ if raw_df is None:
 else:
     df = raw_df.copy()
 
-    # 週線重採樣
     if period == "周線":
         agg_rules = {'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'}
         for chip_col in ['外資', '投信', '自營商']:
@@ -130,7 +131,7 @@ else:
     df['K'] = df['RSV'].ewm(com=2, adjust=False).mean()
     df['D'] = df['K'].ewm(com=2, adjust=False).mean()
 
-    # === 4. 畫圖 (一頁式極緻排版) ===
+    # === 4. 圖表繪製 ===
     fig = make_subplots(
         rows=6, cols=1, shared_xaxes=True, 
         vertical_spacing=0.015, 
@@ -176,7 +177,7 @@ else:
         hovermode="x", 
         barmode='group',
         showlegend=False,
-        dragmode="pan"
+        dragmode="zoom" # 關鍵修正：設為 zoom 以支援手機畫面的捏合放縮手勢
     )
     
     if period == "日線":
@@ -188,4 +189,12 @@ else:
     
     for annotation in fig['layout']['annotations']: annotation['font'] = dict(size=11, color='gray')
     
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    # 關鍵修正：開啟 scrollZoom: True 讓雙指縮放功能生效
+    st.plotly_chart(
+        fig, 
+        use_container_width=True, 
+        config={
+            'displayModeBar': False,
+            'scrollZoom': True
+        }
+    )
